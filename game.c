@@ -8,12 +8,15 @@
 #include "global.h"
 
 // Local function definitions
-static void drawLevel(Block *blocks, int nBlocks);
+static void drawLevel();
 static Quad rectToQuad(Rectangle rect);
 static Vector2 V2Round(Vector2 in);
 static Quad projectQuad(Quad baseQuad, float height);
 static void quicksort(IntFloat *array, int low, int high);
 static float rectPointDist(Vector2 point, Rectangle rect);
+static int indexShit(uint x, uint width, uint height);
+static bool readFromLevel(uint index);
+static void writeToLevel(uint index, bool state);
 
 // Constants
 const Vector2 screenCentre = (Vector2){viewportWidth / 2.0f, viewportHeight / 2.0f};
@@ -25,7 +28,7 @@ const struct {
 // Variables
 static PlayerData player = {(Vector2){0, 0}};
 static bool paused = false;
-static LevelData level;
+static WorldData world;
 static Camera2D camera;
 static Vector2 viewportPos;
 
@@ -37,14 +40,12 @@ static float flicker = 0;
 static Rectangle collidable[4];
 
 void initGame() {
-  int n = 10;
-  int nTot = n*n;
-  level.blocks = (Block*)MemAlloc(sizeof(Block)*nTot);
-  level.nBlocks = nTot;
-  for (int x = 0; x < n; x++) {
-    for (int y = 0; y < n; y++) {
-      level.blocks[y+x*n] = (Block){(Rectangle){(float)x*64, (float)y*64, 32, 32}, ((y+x*n) / (float)nTot) + 0.1f};
-    }
+  writeToLevel(150, 1);
+
+  char buf[1024];
+  for (int i = 0; i < 300; i++) {
+    sprintf(buf, "%d, ", indexShit(i, 20, 15));
+    TraceLog(LOG_WARNING, buf);
   }
 
   camera = (Camera2D){Vector2Zero(), Vector2Zero(), 0.0f, 1.0f};
@@ -122,7 +123,7 @@ void drawGame(RenderTexture2D *output) {
 
     BeginMode2D(camera);
       double startTime = GetTime(); // Start timing
-      drawLevel(level.blocks, level.nBlocks);
+      drawLevel();
       debugStats.levelDrawT = (GetTime() - startTime + debugStats.levelDrawT*19) / 20.0f; // End timing
     EndMode2D();
 
@@ -136,72 +137,40 @@ void drawGame(RenderTexture2D *output) {
 
 void unloadGame() {
   UnloadTexture(backgroundTex);
-  for (int i = 0; i < level.nBlocks; i++) {
-    MemFree(level.blocks);
-  }
 }
 
-static void drawLevel(Block *blocks, int nBlocks) {
-  bool *vis = (bool*)MemAlloc(sizeof(bool) * nBlocks);
-  int nVis = 0;
+static void drawLevel() {
+  for (int i = 0; i < 300; i++) {
+    uint index = indexShit(i, 20, 15);
+    if (readFromLevel(index)) {
+      Rectangle rect = (Rectangle){(index % 20)*32, floor(index / 20.0f)*32, 32, 32};
+      Quad quad = rectToQuad(rect);
+      Quad projQuad = projectQuad(quad, 1);
+      Vector2 middle = (Vector2){rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f};
+      float brightness = (100 / (rectPointDist(player.pos, rect) * 0.08 + 1)) * (flicker / 256.0f + 0.875);
 
-  for (int i = 0; i < nBlocks; i++) {
-    if (CheckCollisionRecs(blocks[i].rect, (Rectangle){viewportPos.x, viewportPos.y, (float)viewportWidth, (float)viewportHeight})) {
-      nVis++;
-      vis[i] = true;
-    } else {
-      vis[i] = false;
+      DrawTriangleFan(projQuad.verts, 4, (Color){20, 20, 20, 255});
+
+      if (quad.verts[3].y < player.pos.y) {
+        Vector2 face[4] = {quad.verts[0], quad.verts[1], projQuad.verts[1], projQuad.verts[0]};
+        unsigned char faceBr = brightness * Vector2DotProduct((Vector2){0, 1}, Vector2Normalize(Vector2Subtract(player.pos, middle)));
+        DrawTriangleFan(face, 4, (Color){faceBr, faceBr, faceBr, 255});
+      } else if (quad.verts[2].y > player.pos.y) {
+        Vector2 face[4] = {quad.verts[2], quad.verts[3], projQuad.verts[3], projQuad.verts[2]};
+        unsigned char faceBr = brightness * Vector2DotProduct((Vector2){0, -1}, Vector2Normalize(Vector2Subtract(player.pos, middle)));
+        DrawTriangleFan(face, 4, (Color){faceBr, faceBr, faceBr, 255});
+      }
+      if (quad.verts[1].x < player.pos.x) {
+        Vector2 face[4] = {quad.verts[1], quad.verts[2], projQuad.verts[2], projQuad.verts[1]};
+        unsigned char faceBr = brightness * Vector2DotProduct((Vector2){1, 0}, Vector2Normalize(Vector2Subtract(player.pos, middle)));
+        DrawTriangleFan(face, 4, (Color){faceBr, faceBr, faceBr, 255});
+      } else if (quad.verts[3].x > player.pos.x) {
+        Vector2 face[4] = {quad.verts[3], quad.verts[0], projQuad.verts[0], projQuad.verts[3]};
+        unsigned char faceBr = brightness * Vector2DotProduct((Vector2){-1, 0}, Vector2Normalize(Vector2Subtract(player.pos, middle)));
+        DrawTriangleFan(face, 4, (Color){faceBr, faceBr, faceBr, 255});
+      }
     }
   }
-
-  IntFloat *order = (IntFloat*)MemAlloc(sizeof(IntFloat) * nVis);
-
-  int q = 0;
-  for (int i = 0; i < nBlocks; i++) {
-    if (vis[i]) {
-      order[q].i = i;
-      order[q].f = -rectPointDist(player.pos, blocks[i].rect);
-      q++;
-    }
-  }
-
-  quicksort(order, 0, nVis-1);
-
-  for (int i = 0; i < nVis; i++) {
-    Rectangle rect = blocks[order[i].i].rect;
-    Quad quad = rectToQuad(rect);
-    Quad projQuad = projectQuad(quad, blocks[order[i].i].height);
-    Vector2 middle = (Vector2){rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f};
-    float brightness = (100 / (-order[i].f * 0.08 + 1)) * (flicker / 256.0f + 0.875);
-
-    DrawTriangleFan(projQuad.verts, 4, (Color){20, 20, 20, 255});
-
-    if (quad.verts[3].y < player.pos.y) {
-      Vector2 face[4] = {quad.verts[0], quad.verts[1], projQuad.verts[1], projQuad.verts[0]};
-      unsigned char faceBr = brightness * Vector2DotProduct((Vector2){0, 1}, Vector2Normalize(Vector2Subtract(player.pos, middle)));
-      DrawTriangleFan(face, 4, (Color){faceBr, faceBr, faceBr, 255});
-    } else if (quad.verts[2].y > player.pos.y) {
-      Vector2 face[4] = {quad.verts[2], quad.verts[3], projQuad.verts[3], projQuad.verts[2]};
-      unsigned char faceBr = brightness * Vector2DotProduct((Vector2){0, -1}, Vector2Normalize(Vector2Subtract(player.pos, middle)));
-      DrawTriangleFan(face, 4, (Color){faceBr, faceBr, faceBr, 255});
-    }
-    if (quad.verts[1].x < player.pos.x) {
-      Vector2 face[4] = {quad.verts[1], quad.verts[2], projQuad.verts[2], projQuad.verts[1]};
-      unsigned char faceBr = brightness * Vector2DotProduct((Vector2){1, 0}, Vector2Normalize(Vector2Subtract(player.pos, middle)));
-      DrawTriangleFan(face, 4, (Color){faceBr, faceBr, faceBr, 255});
-    } else if (quad.verts[3].x > player.pos.x) {
-      Vector2 face[4] = {quad.verts[3], quad.verts[0], projQuad.verts[0], projQuad.verts[3]};
-      unsigned char faceBr = brightness * Vector2DotProduct((Vector2){-1, 0}, Vector2Normalize(Vector2Subtract(player.pos, middle)));
-      DrawTriangleFan(face, 4, (Color){faceBr, faceBr, faceBr, 255});
-    }
-  }
-
-  for (int i = 1; i <= 4 && i < nVis; i++) {
-    collidable[i-1] = blocks[order[nVis-i].i].rect;
-  }
-
-  MemFree(order);
-  MemFree(vis);
 }
 
 static Quad rectToQuad(Rectangle rect) {
@@ -254,4 +223,77 @@ static float rectPointDist(Vector2 point, Rectangle rect) {
     temp = fminf(temp, Vector2Distance(point, quad.verts[i]));
   }
   return temp;
+}
+
+static int indexShit(uint x, uint width, uint height) {
+  int output = 0;
+  uint layer = ceil(x / 8.0f) + 1;
+  uint relPos = x - ((layer-1) * (layer-1) + (layer-1)) * 4;
+  uint section = ceil(x / 4.0f);
+
+  if (section == 0 || section == layer * 2) {
+    uint trough = section / 2;
+    switch (relPos % 4) {
+      case 0:
+        output += layer;
+        output -= trough * width;
+      case 1:
+        output -= layer;
+        output += trough * width;
+      case 2:
+        output += trough;
+        output -= layer * width;
+      case 3:
+        output -= trough;
+        output += layer * width;
+    }
+  } else {
+    uint stage = ceil((section - 1) / 2.0f);
+    if (section % 2 == 0) {
+      switch (relPos % 4) {
+        case 0:
+          output += layer;
+          output -= stage * width;
+        case 1:
+          output += layer;
+          output += stage * width;
+        case 2:
+          output -= layer;
+          output -= stage * width;
+        case 3:
+          output -= layer;
+          output += stage * width;
+      }
+    } else {
+      switch (relPos % 4) {
+        case 0:
+          output += stage;
+          output -= layer * width;
+        case 1:
+          output += stage;
+          output += layer * width;
+        case 2:
+          output -= stage;
+          output -= layer * width;
+        case 3:
+          output -= stage;
+          output += layer * width;
+      }
+    }
+  }
+
+  return output;
+}
+
+static bool readFromLevel(uint index) {
+  int byte = floor(index / 8.0f);
+  int p = index % 8;
+  return (world.level[byte] >> (p-1)) % 2;
+}
+
+static void writeToLevel(uint index, bool state) {
+  int byte = floor(index / 8.0f);
+  int p = index % 8;
+  char mask = 1 << p;
+  world.level[byte] = ((world.level[byte] & ~mask) | (state << p));
 }

@@ -3,16 +3,12 @@
 
 #include "raylib.h"
 #include "raymath.h"
+#include "global.h"
 
 // Typedefs
 typedef struct Quad {
     Vector2 verts[4];
 } Quad;
-
-typedef struct Block {
-  Rectangle rect;
-  float height;
-} Block;
 
 typedef struct IntFloat {
     int i;
@@ -24,9 +20,8 @@ typedef struct PlayerData {
 } PlayerData;
 
 typedef struct WorldData {
-  Block *blocks;
-  int nBlocks;
-} LevelData;
+  char level[38]; // half of last byte not used
+} WorldData;
 
 // Function definitions
 void initGame();
