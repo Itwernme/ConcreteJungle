@@ -20,7 +20,7 @@ typedef struct PlayerData {
 } PlayerData;
 
 typedef struct WorldData {
-  char level[38]; // half of last byte not used
+  char level[56];
 } WorldData;
 
 // Function definitions

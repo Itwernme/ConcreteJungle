@@ -14,7 +14,7 @@ static Vector2 V2Round(Vector2 in);
 static Quad projectQuad(Quad baseQuad, float height);
 static void quicksort(IntFloat *array, int low, int high);
 static float rectPointDist(Vector2 point, Rectangle rect);
-static int indexShit(uint x, uint width, uint height);
+static uint indexShit(uint x, int width, int height);
 static bool readFromLevel(uint index);
 static void writeToLevel(uint index, bool state);
 
@@ -40,13 +40,7 @@ static float flicker = 0;
 static Rectangle collidable[4];
 
 void initGame() {
-  writeToLevel(150, 1);
-
-  char buf[1024];
-  for (int i = 0; i < 300; i++) {
-    sprintf(buf, "%d, ", indexShit(i, 20, 15));
-    TraceLog(LOG_WARNING, buf);
-  }
+  writeToLevel(5, true);
 
   camera = (Camera2D){Vector2Zero(), Vector2Zero(), 0.0f, 1.0f};
 
@@ -140,8 +134,9 @@ void unloadGame() {
 }
 
 static void drawLevel() {
-  for (int i = 0; i < 300; i++) {
-    uint index = indexShit(i, 20, 15);
+  for (int i = 1; i < 441; i++) {
+    uint index = indexShit(i, 21, 21);
+
     if (readFromLevel(index)) {
       Rectangle rect = (Rectangle){(index % 20)*32, floor(index / 20.0f)*32, 32, 32};
       Quad quad = rectToQuad(rect);
@@ -189,7 +184,7 @@ static Quad projectQuad(Quad baseQuad, float height) {
   }
   return projQuad;
 }
-
+/*
 static void quicksort(IntFloat *array, int low, int high) {
   int x, y, p;
   IntFloat temp;
@@ -213,7 +208,7 @@ static void quicksort(IntFloat *array, int low, int high) {
     quicksort(array, y+1, high);
   }
 }
-
+*/
 static float rectPointDist(Vector2 point, Rectangle rect) {
   if (rect.y + rect.height > point.y && point.y > rect.y) return fminf(abs(rect.x - point.x), abs((rect.x + rect.width) - point.x));
   if (rect.x + rect.width > point.x && point.x > rect.x) return fminf(abs(rect.y - point.y), abs((rect.y + rect.height) - point.y));
@@ -225,64 +220,76 @@ static float rectPointDist(Vector2 point, Rectangle rect) {
   return temp;
 }
 
-static int indexShit(uint x, uint width, uint height) {
-  int output = 0;
-  uint layer = ceil(x / 8.0f) + 1;
-  uint relPos = x - ((layer-1) * (layer-1) + (layer-1)) * 4;
-  uint section = ceil(x / 4.0f);
+static uint indexShit(uint x, int width, int height) {
+  int outputx, outputy;
+  int layer = ceil((sqrt(x+1)-1) / 2.0f);
+  int relPos = x - ((layer-1) * (layer-1) + (layer-1)) * 4;
+  int section = ceil(relPos / 4.0f);
 
-  if (section == 0 || section == layer * 2) {
-    uint trough = section / 2;
+  if (section == 1 || section == layer * 2) {
+    int trough = section / 2;
     switch (relPos % 4) {
       case 0:
-        output += layer;
-        output -= trough * width;
+        outputx = layer;
+        outputy = trough;
+        break;
       case 1:
-        output -= layer;
-        output += trough * width;
+        outputx = -layer;
+        outputy = -trough;
+        break;
       case 2:
-        output += trough;
-        output -= layer * width;
+        outputx = trough;
+        outputy = -layer;
+        break;
       case 3:
-        output -= trough;
-        output += layer * width;
+        outputx = -trough;
+        outputy = layer;
+        break;
     }
   } else {
-    uint stage = ceil((section - 1) / 2.0f);
+    int stage = ceil((section - 1) / 2.0f);
     if (section % 2 == 0) {
       switch (relPos % 4) {
         case 0:
-          output += layer;
-          output -= stage * width;
+          outputx = layer;
+          outputy = -stage;
+          break;
         case 1:
-          output += layer;
-          output += stage * width;
+          outputx = layer;
+          outputy = stage;
+          break;
         case 2:
-          output -= layer;
-          output -= stage * width;
+          outputx = -layer;
+          outputy = -stage;
+          break;
         case 3:
-          output -= layer;
-          output += stage * width;
+          outputx = -layer;
+          outputy = stage;
+          break;
       }
     } else {
       switch (relPos % 4) {
         case 0:
-          output += stage;
-          output -= layer * width;
+          outputx = stage;
+          outputy = -layer;
+          break;
         case 1:
-          output += stage;
-          output += layer * width;
+          outputx = stage;
+          outputy = layer;
+          break;
         case 2:
-          output -= stage;
-          output -= layer * width;
+          outputx = -stage;
+          outputy = -layer;
+          break;
         case 3:
-          output -= stage;
-          output += layer * width;
+          outputx = -stage;
+          outputy = layer;
+          break;
       }
     }
   }
 
-  return output;
+  return (outputx + outputy * width) + width * height * 0.5f;// + width * height * 0.5f;
 }
 
 static bool readFromLevel(uint index) {
