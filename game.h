@@ -10,17 +10,16 @@ typedef struct Quad {
     Vector2 verts[4];
 } Quad;
 
-typedef struct IntFloat {
-    int i;
-    float f;
-} IntFloat;
+typedef struct Int2 {
+    int x, y;
+} Int2;
 
 typedef struct PlayerData {
   Vector2 pos;
 } PlayerData;
 
 typedef struct WorldData {
-  char level[56];
+  char level[21][3];
 } WorldData;
 
 // Function definitions

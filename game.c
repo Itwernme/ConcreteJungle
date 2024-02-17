@@ -11,19 +11,20 @@
 static void drawLevel();
 static Quad rectToQuad(Rectangle rect);
 static Vector2 V2Round(Vector2 in);
-static Quad projectQuad(Quad baseQuad, float height);
-static void quicksort(IntFloat *array, int low, int high);
+//static void quicksort(IntFloat *array, int low, int high);
 static float rectPointDist(Vector2 point, Rectangle rect);
-static uint indexShit(uint x, int width, int height);
-static bool readFromLevel(uint index);
-static void writeToLevel(uint index, bool state);
+static Int2 indexShit(uint x);
+static bool readFromLevel(Int2 pos);
+static void writeToLevel(Int2 pos, bool state);
+static Int2 getPlayerTile();
+static void drawTile(Vector2 pos);
 
 // Constants
 const Vector2 screenCentre = (Vector2){viewportWidth / 2.0f, viewportHeight / 2.0f};
 const struct {
   float speed;
   float size;
-} playerConsts = {80, 6};
+} playerConsts = {200, 6};
 
 // Variables
 static PlayerData player = {(Vector2){0, 0}};
@@ -40,7 +41,9 @@ static float flicker = 0;
 static Rectangle collidable[4];
 
 void initGame() {
-  writeToLevel(5, true);
+  for (int i = 0; i < 21; i++) {
+    writeToLevel((Int2){i, i}, true);
+  }
 
   camera = (Camera2D){Vector2Zero(), Vector2Zero(), 0.0f, 1.0f};
 
@@ -115,13 +118,12 @@ void drawGame(RenderTexture2D *output) {
     Vector2 modPos = (Vector2){(float)((int)viewportPos.x % 64), (float)((int)viewportPos.y % 64)};
     DrawTexturePro(backgroundTex, (Rectangle){modPos.x, modPos.y, (float)viewportWidth, (float)viewportHeight}, (Rectangle){0, 0, (float)viewportWidth, (float)viewportHeight}, Vector2Zero(), 0.0f, WHITE);
 
-    BeginMode2D(camera);
-      double startTime = GetTime(); // Start timing
-      drawLevel();
-      debugStats.levelDrawT = (GetTime() - startTime + debugStats.levelDrawT*19) / 20.0f; // End timing
-    EndMode2D();
+    double startTime = GetTime(); // Start timing
+    //drawLevel();
+    drawTile(Vector2Add(camera.offset, (Vector2){0, 0}));
+    debugStats.levelDrawT = (GetTime() - startTime + debugStats.levelDrawT*19) / 20.0f; // End timing
 
-    DrawTexturePro(vignetteTex, (Rectangle){flicker / 2.0f, flicker / 2.0f, viewportWidth - flicker, viewportHeight - flicker}, (Rectangle){0, 0, viewportWidth, viewportHeight}, Vector2Zero(), 0.0f, WHITE);
+    //DrawTexturePro(vignetteTex, (Rectangle){flicker / 2.0f, flicker / 2.0f, viewportWidth - flicker, viewportHeight - flicker}, (Rectangle){0, 0, viewportWidth, viewportHeight}, Vector2Zero(), 0.0f, WHITE);
 
     DrawCircleV(screenCentre, playerConsts.size, RED);
 
@@ -134,11 +136,13 @@ void unloadGame() {
 }
 
 static void drawLevel() {
-  for (int i = 1; i < 441; i++) {
-    uint index = indexShit(i, 21, 21);
+  Int2 playerTile = getPlayerTile();
+  for (int i = 440; i > 0; i--) {
+    Int2 relPos = indexShit(i);
+    Int2 globalPos = (Int2){playerTile.x + relPos.x, playerTile.y + relPos.y};
 
-    if (readFromLevel(index)) {
-      Rectangle rect = (Rectangle){(index % 20)*32, floor(index / 20.0f)*32, 32, 32};
+    if (readFromLevel(globalPos)) {
+      Rectangle rect = (Rectangle){relPos.x * 32 + screenCentre.x, relPos.y * 32 + screenCentre.y, 32, 32};
       Quad quad = rectToQuad(rect);
       Quad projQuad = projectQuad(quad, 1);
       Vector2 middle = (Vector2){rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f};
@@ -176,14 +180,6 @@ static Quad rectToQuad(Rectangle rect) {
 static Vector2 V2Round(Vector2 in) {
   return (Vector2){roundf(in.x), roundf(in.y)};
 }
-
-static Quad projectQuad(Quad baseQuad, float height) {
-  Quad projQuad;
-  for (int i = 0; i < 4; i++) {
-    projQuad.verts[i] = Vector2Add(Vector2Scale(Vector2Subtract(baseQuad.verts[i], player.pos), 1.0f / height), baseQuad.verts[i]);
-  }
-  return projQuad;
-}
 /*
 static void quicksort(IntFloat *array, int low, int high) {
   int x, y, p;
@@ -220,7 +216,7 @@ static float rectPointDist(Vector2 point, Rectangle rect) {
   return temp;
 }
 
-static uint indexShit(uint x, int width, int height) {
+static Int2 indexShit(uint x) {
   int outputx, outputy;
   int layer = ceil((sqrt(x+1)-1) / 2.0f);
   int relPos = x - ((layer-1) * (layer-1) + (layer-1)) * 4;
@@ -289,18 +285,62 @@ static uint indexShit(uint x, int width, int height) {
     }
   }
 
-  return (outputx + outputy * width) + width * height * 0.5f;// + width * height * 0.5f;
+  //return (outputx + outputy * width) + width * height * 0.5f;// + width * height * 0.5f;
+  return (Int2){outputx, outputy};
 }
 
-static bool readFromLevel(uint index) {
-  int byte = floor(index / 8.0f);
-  int p = index % 8;
-  return (world.level[byte] >> (p-1)) % 2;
+static bool readFromLevel(Int2 pos) {
+  pos = (Int2){(pos.x % 21), (pos.y % 21)};
+  if (pos.x < 0) pos.x += 22;
+  if (pos.y < 0) pos.y += 22;
+  int byte = floor(pos.x / 8.0f);
+  int p = pos.x % 8;
+  return (world.level[pos.y][byte] >> (p-1)) % 2;
 }
 
-static void writeToLevel(uint index, bool state) {
-  int byte = floor(index / 8.0f);
-  int p = index % 8;
+static void writeToLevel(Int2 pos, bool state) {
+  pos = (Int2){(pos.x % 21), (pos.y % 21)};
+  if (pos.x < 0) pos.x += 22;
+  if (pos.y < 0) pos.y += 22;
+  int byte = floor(pos.x / 8.0f);
+  int p = pos.x % 8;
   char mask = 1 << p;
-  world.level[byte] = ((world.level[byte] & ~mask) | (state << p));
+  world.level[pos.y][byte] = ((world.level[pos.y][byte] & ~mask) | (state << p));
+}
+
+static Int2 getPlayerTile() {
+  return (Int2){floor(player.pos.x / 32), floor(player.pos.y / 32)};
+}
+
+static void drawTile(Vector2 pos) {
+  Rectangle rect = (Rectangle){pos.x, pos.y, 32, 32};
+  Quad quad = rectToQuad(rect);
+  Quad projQuad;
+  for (int i = 0; i < 4; i++) {
+    projQuad.verts[i] = Vector2Add(Vector2Scale(Vector2Subtract(quad.verts[i], screenCentre), 1.0f / 1.0f), quad.verts[i]);
+  }
+
+  Vector2 middle = (Vector2){rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f};
+  float brightness = (100 / (rectPointDist(screenCentre, rect) * 0.08 + 1)) * (flicker / 256.0f + 0.875);
+
+  DrawTriangleFan(projQuad.verts, 4, (Color){20, 20, 20, 255});
+
+  if (quad.verts[3].y < screenCentre.y) {
+    Vector2 face[4] = {quad.verts[0], quad.verts[1], projQuad.verts[1], projQuad.verts[0]};
+    unsigned char faceBr = brightness * Vector2DotProduct((Vector2){0, 1}, Vector2Normalize(Vector2Subtract(screenCentre, middle)));
+    DrawTriangleFan(face, 4, (Color){faceBr, faceBr, faceBr, 255});
+  } else if (quad.verts[2].y > screenCentre.y) {
+    Vector2 face[4] = {quad.verts[2], quad.verts[3], projQuad.verts[3], projQuad.verts[2]};
+    unsigned char faceBr = brightness * Vector2DotProduct((Vector2){0, -1}, Vector2Normalize(Vector2Subtract(screenCentre, middle)));
+    DrawTriangleFan(face, 4, (Color){faceBr, faceBr, faceBr, 255});
+  }
+  if (quad.verts[1].x < screenCentre.x) {
+    Vector2 face[4] = {quad.verts[1], quad.verts[2], projQuad.verts[2], projQuad.verts[1]};
+    unsigned char faceBr = brightness * Vector2DotProduct((Vector2){1, 0}, Vector2Normalize(Vector2Subtract(screenCentre, middle)));
+    DrawTriangleFan(face, 4, (Color){faceBr, faceBr, faceBr, 255});
+  } else if (quad.verts[3].x > screenCentre.x) {
+    Vector2 face[4] = {quad.verts[3], quad.verts[0], projQuad.verts[0], projQuad.verts[3]};
+    unsigned char faceBr = brightness * Vector2DotProduct((Vector2){-1, 0}, Vector2Normalize(Vector2Subtract(screenCentre, middle)));
+    DrawTriangleFan(face, 4, (Color){faceBr, faceBr, faceBr, 255});
+  }
 }
