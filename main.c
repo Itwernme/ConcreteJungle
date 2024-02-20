@@ -77,6 +77,7 @@ static void draw() {
   BeginDrawing();
     ClearBackground(BLACK);
     DrawTexturePro(viewport.texture, (Rectangle){0, 0, viewportWidth, -viewportHeight}, (Rectangle){pos.x, pos.y, viewportWidth * scale, viewportHeight * scale}, Vector2Zero(), 0.0f, WHITE);
+    DrawFPS(GetScreenWidth() - 80, 10);
     DrawText(buf, 10, 10, 10, GREEN);
   EndDrawing();
 }

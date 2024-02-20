@@ -19,7 +19,7 @@ typedef struct PlayerData {
 } PlayerData;
 
 typedef struct WorldData {
-  char level[21][3];
+  unsigned char level[21][3];
 } WorldData;
 
 // Function definitions
