@@ -21,7 +21,7 @@ const Vector2 screenCentre = (Vector2){viewportWidth / 2.0f, viewportHeight / 2.
 const struct {
   float speed;
   float size;
-} playerConsts = {200, 6};
+} playerConsts = {80, 6};
 
 // Variables
 static PlayerData player = {(Vector2){0, 0}};
@@ -29,6 +29,7 @@ static bool paused = false;
 static WorldData world;
 //static Camera2D camera;
 static Vector2 globalOffset;
+static Int2 gridPos;
 static Vector2 viewportPos;
 
 static Texture2D backgroundTex;
@@ -37,9 +38,6 @@ static Texture2D vignetteTex;
 static float flicker = 0;
 
 void initGame() {
-  for (int i = 0; i < 21; i++) {
-    writeToLevel((Int2){i, i}, true);
-  }
 
   //camera = (Camera2D){Vector2Zero(), Vector2Zero(), 0.0f, 1.0f};
 
@@ -65,9 +63,10 @@ void updateGame(float delta) {
 
   rawIn = Vector2Scale(Vector2Normalize(rawIn), playerConsts.speed * delta * GetRandomValue(30, 100) / 100.0f);
   rawPos = Vector2Add(rawPos, rawIn);
+  Int2 oldGridPos = gridPos;
+  gridPos = (Int2){(roundf(rawPos.x) > 0 ? (int)roundf(rawPos.x) / 32 : floor(roundf(rawPos.x) / 32.0f)), (roundf(rawPos.y) > 0 ? (int)roundf(rawPos.y) / 32 : floor(roundf(rawPos.y) / 32.0f))};
 
   // Collisions
-  Int2 gridPos = (Int2){(rawPos.x > 0 ? (int)rawPos.x / 32 : floor(rawPos.x / 32.0f)), (rawPos.y > 0 ? (int)rawPos.y / 32 : floor(rawPos.y / 32.0f))};
   for (int i = 0; i < 8; i++) {
     Int2 relPos = indexShit(i+1);
     if (readFromLevel((Int2){gridPos.x + relPos.x, gridPos.y + relPos.y})) {
@@ -104,7 +103,60 @@ void updateGame(float delta) {
     }
   }
 
+  // Level gen
+  if (gridPos.x > oldGridPos.x) {
+    int stripPos = gridPos.x + 10;
+    for (int i = 0; i < 21; i++) {
+      Int2 pos = (Int2){stripPos, i};
+      if (readFromLevel((Int2){pos.x-1, pos.y-1})) {
+        writeToLevel(pos, 0);
+      } else if (readFromLevel((Int2){pos.x, pos.y-1}) && readFromLevel((Int2){pos.x-1, pos.y})) {
+        writeToLevel(pos, 1);
+      } else {
+        writeToLevel(pos, GetRandomValue(0, 1));
+      }
+    }
+  } else if (gridPos.x < oldGridPos.x) {
+    int stripPos = gridPos.x - 10;
+    for (int i = 0; i < 21; i++) {
+      Int2 pos = (Int2){stripPos, i};
+      if (readFromLevel((Int2){pos.x+1, pos.y-1})) {
+        writeToLevel(pos, 0);
+      } else if (readFromLevel((Int2){pos.x, pos.y-1}) && readFromLevel((Int2){pos.x+1, pos.y})) {
+        writeToLevel(pos, 1);
+      } else {
+        writeToLevel(pos, GetRandomValue(0, 1));
+      }
+    }
+  }
+  if (gridPos.y > oldGridPos.y) {
+    int stripPos = gridPos.y + 10;
+    for (int i = 0; i < 21; i++) {
+      Int2 pos = (Int2){i, stripPos};
+      if (readFromLevel((Int2){pos.x-1, pos.y-1})) {
+        writeToLevel(pos, 0);
+      } else if (readFromLevel((Int2){pos.x, pos.y-1}) && readFromLevel((Int2){pos.x-1, pos.y})) {
+        writeToLevel(pos, 1);
+      } else {
+        writeToLevel(pos, GetRandomValue(0, 1));
+      }
+    }
+  } else if (gridPos.y < oldGridPos.y) {
+    int stripPos = gridPos.y - 10;
+    for (int i = 0; i < 21; i++) {
+      Int2 pos = (Int2){i, stripPos};
+      if (readFromLevel((Int2){pos.x-1, pos.y+1})) {
+        writeToLevel(pos, 0);
+      } else if (readFromLevel((Int2){pos.x, pos.y+1}) && readFromLevel((Int2){pos.x-1, pos.y})) {
+        writeToLevel(pos, 1);
+      } else {
+        writeToLevel(pos, GetRandomValue(0, 1));
+      }
+    }
+  }
+
   player.pos = (Vector2){roundf(rawPos.x), roundf(rawPos.y)};
+  gridPos = (Int2){(player.pos.x > 0 ? (int)player.pos.x / 32 : floor(player.pos.x / 32.0f)), (player.pos.y > 0 ? (int)player.pos.y / 32 : floor(player.pos.y / 32.0f))};
   globalOffset = Vector2Subtract(screenCentre, player.pos);
   viewportPos = Vector2Subtract(player.pos, screenCentre);
 }
@@ -119,7 +171,6 @@ void drawGame(RenderTexture2D *output) {
     DrawTexturePro(backgroundTex, (Rectangle){(int)viewportPos.x % 64, (int)viewportPos.y % 64, (float)viewportWidth, (float)viewportHeight}, (Rectangle){0, 0, (float)viewportWidth, (float)viewportHeight}, Vector2Zero(), 0.0f, WHITE);
 
     double startTime = GetTime(); // Start timing
-    Int2 gridPos = (Int2){(player.pos.x > 0 ? (int)player.pos.x / 32 : floor(player.pos.x / 32.0f)), (player.pos.y > 0 ? (int)player.pos.y / 32 : floor(player.pos.y / 32.0f))};
     Int2 subGridPos = (Int2){myMod(player.pos.x, 32), myMod(player.pos.y, 32)};
 
     for (int i = 440; i > 0; i--) {
@@ -143,6 +194,7 @@ void drawGame(RenderTexture2D *output) {
 
 void unloadGame() {
   UnloadTexture(backgroundTex);
+  UnloadTexture(vignetteTex);
 }
 
 static Quad rectToQuad(Rectangle rect) {
@@ -254,7 +306,7 @@ static void drawTile(Vector2 pos) {
   Quad quad = rectToQuad(rect);
   Quad projQuad;
   for (int i = 0; i < 4; i++) {
-    projQuad.verts[i] = Vector2Add(Vector2Scale(Vector2Subtract(quad.verts[i], screenCentre), 1.0f / 1.0f), quad.verts[i]);
+    projQuad.verts[i] = Vector2Add(Vector2Scale(Vector2Subtract(quad.verts[i], screenCentre), 2.0f), quad.verts[i]);
   }
 
   Vector2 middle = (Vector2){rect.x + rect.width / 2.0f, rect.y + rect.height / 2.0f};
