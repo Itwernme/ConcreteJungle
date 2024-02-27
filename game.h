@@ -3,30 +3,24 @@
 
 #include "raylib.h"
 #include "raymath.h"
+#include "global.h"
 
 // Typedefs
 typedef struct Quad {
     Vector2 verts[4];
 } Quad;
 
-typedef struct Block {
-  Rectangle rect;
-  float height;
-} Block;
-
-typedef struct IntFloat {
-    int i;
-    float f;
-} IntFloat;
+typedef struct Int2 {
+    int x, y;
+} Int2;
 
 typedef struct PlayerData {
   Vector2 pos;
 } PlayerData;
 
 typedef struct WorldData {
-  Block *blocks;
-  int nBlocks;
-} LevelData;
+  unsigned char level[21][3];
+} WorldData;
 
 // Function definitions
 void initGame();

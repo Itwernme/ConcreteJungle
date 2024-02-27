@@ -6,6 +6,7 @@
 
 // Typedefs
 typedef enum Screen {UNKNOWN = -1, MENU = 0, GAME} Screen;
+typedef unsigned int uint;
 
 // Function definitions
 
